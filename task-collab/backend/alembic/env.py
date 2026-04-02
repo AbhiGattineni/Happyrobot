@@ -7,7 +7,7 @@ from alembic import context
 from app.core.config import get_settings
 from app.db.session import Base
 
-# Import app.models so Project (and future models) register on Base.metadata for autogenerate.
+# Import app.models so Project, Task, etc. register on Base.metadata for autogenerate.
 import app.models  # noqa: F401
 
 config = context.config

@@ -2,6 +2,7 @@ import uuid
 
 from sqlalchemy import Column, DateTime, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import relationship
 
 from app.db.session import Base
 
@@ -23,4 +24,10 @@ class Project(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+    tasks = relationship(
+        "Task",
+        back_populates="project",
+        cascade="all, delete-orphan",
     )

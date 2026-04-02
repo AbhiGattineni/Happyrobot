@@ -4,7 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.schemas.comment import CommentCreate, CommentRead
 from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
+from app.services import comment_service as comment_svc
 from app.services import task_service as task_svc
 
 router = APIRouter(tags=["tasks"])
@@ -60,3 +62,17 @@ def delete_task(
 ):
     if not task_svc.delete_task_by_id(db, task_id):
         raise HTTPException(status_code=404, detail="Task not found")
+
+
+@router.post(
+    "/tasks/{task_id}/comments",
+    response_model=CommentRead,
+    status_code=201,
+)
+def create_comment(
+    task_id: uuid.UUID,
+    payload: CommentCreate,
+    db: Session = Depends(get_db),
+):
+    merged = payload.model_copy(update={"task_id": task_id})
+    return comment_svc.create_comment(db, merged)

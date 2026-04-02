@@ -9,6 +9,13 @@ from app.models.task_dependency import TaskDependency
 from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
 
 
+def _status_to_str(value: object) -> str:
+    enum_value = getattr(value, "value", None)
+    if enum_value is not None:
+        return str(enum_value)
+    return str(value)
+
+
 def _validate_status_transition(current: str, new: str) -> None:
     allowed: dict[str, set[str]] = {
         "TODO": {"IN_PROGRESS"},
@@ -76,8 +83,8 @@ def update_task_by_id(
 
     # Validate status transitions only when `status` is being updated.
     if "status" in updates and updates["status"] is not None:
-        current_status = str(row.status)
-        new_status = str(updates["status"])
+        current_status = _status_to_str(row.status)
+        new_status = _status_to_str(updates["status"])
         _validate_status_transition(current_status, new_status)
 
         # When moving to DONE, ensure all dependencies are already DONE.
@@ -95,9 +102,9 @@ def update_task_by_id(
             )
 
             not_done = [
-                (dep_id, str(dep_status))
+                (dep_id, _status_to_str(dep_status))
                 for dep_id, dep_status in dep_rows
-                if str(dep_status) != "DONE"
+                if _status_to_str(dep_status) != "DONE"
             ]
 
             if not_done:

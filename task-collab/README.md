@@ -55,7 +55,7 @@ docker compose up -d
 ```bash
 cd backend
 source .venv/bin/activate   # or Windows activate script above
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 **Terminal 3 — web (from project root):**

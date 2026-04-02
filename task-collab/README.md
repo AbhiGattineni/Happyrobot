@@ -34,6 +34,19 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
+With PostgreSQL running, apply migrations (from `backend/`):
+
+```bash
+alembic upgrade head
+```
+
+After you add or change SQLAlchemy models, generate and apply migrations:
+
+```bash
+alembic revision --autogenerate -m "short_description"
+alembic upgrade head
+```
+
 ### Frontend
 
 ```bash
@@ -51,6 +64,8 @@ docker compose up -d
 ```
 
 **Terminal 2 — API (from project root):**
+
+Run from the `backend/` folder so imports resolve. The app module is `app.main:app` (not `main:app`). Use `--reload` so the server restarts when you edit Python files.
 
 ```bash
 cd backend

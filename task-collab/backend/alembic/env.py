@@ -7,8 +7,8 @@ from alembic import context
 from app.core.config import get_settings
 from app.db.session import Base
 
-# Import ORM models here when added so autogenerate sees them, e.g.:
-# from app.models import user  # noqa: F401
+# Import app.models so Project (and future models) register on Base.metadata for autogenerate.
+import app.models  # noqa: F401
 
 config = context.config
 

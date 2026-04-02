@@ -29,6 +29,9 @@ function statusLabel(status: TaskStatus) {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const TASK_PAGE_SIZE = 20;
+const COMMENT_PAGE_SIZE = 5;
+
 export default function ProjectDetailClient({
   projectId,
 }: {
@@ -36,12 +39,20 @@ export default function ProjectDetailClient({
 }) {
   const trimmedProjectId = (projectId ?? "").trim();
   const [tasks, setTasks] = useState<TaskRead[]>([]);
+  const [taskTotal, setTaskTotal] = useState(0);
+  const [taskPage, setTaskPage] = useState(0);
+  const taskPageRef = useRef(0);
+  const tasksRef = useRef<TaskRead[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const selectedTaskIdRef = useRef<string | null>(null);
   const [comments, setComments] = useState<CommentRead[]>([]);
+  const [commentTotal, setCommentTotal] = useState(0);
+  const [commentPage, setCommentPage] = useState(0);
+  const commentPageRef = useRef(0);
+  const commentsRef = useRef<CommentRead[]>([]);
   const [commentsLoading, setCommentsLoading] = useState<boolean>(false);
   const [commentsError, setCommentsError] = useState<string | null>(null);
   const [newCommentContent, setNewCommentContent] = useState<string>("");
@@ -55,31 +66,68 @@ export default function ProjectDetailClient({
     selectedTaskIdRef.current = selectedTaskId;
   }, [selectedTaskId]);
 
-  async function loadTasks(id: string) {
-    setLoading(true);
-    setError(null);
-    try {
-      const list = await getTasksByProject(id);
-      setTasks(list);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load tasks.");
-    } finally {
-      setLoading(false);
-    }
-  }
+  useEffect(() => {
+    taskPageRef.current = taskPage;
+  }, [taskPage]);
+
+  useEffect(() => {
+    commentPageRef.current = commentPage;
+  }, [commentPage]);
+
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
+
+  useEffect(() => {
+    commentsRef.current = comments;
+  }, [comments]);
+
+  useEffect(() => {
+    setTaskPage(0);
+  }, [trimmedProjectId]);
 
   useEffect(() => {
     if (!projectIdValid) {
       setTasks([]);
+      setTaskTotal(0);
       setError("Invalid project id.");
       setLoading(false);
       return;
     }
 
+    let cancelled = false;
+    setLoading(true);
     setError(null);
-    loadTasks(trimmedProjectId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectIdValid]);
+
+    (async () => {
+      try {
+        const offset = taskPage * TASK_PAGE_SIZE;
+        const res = await getTasksByProject(trimmedProjectId, {
+          limit: TASK_PAGE_SIZE,
+          offset,
+        });
+        if (cancelled) return;
+        setTasks(res.items);
+        setTaskTotal(res.total);
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load tasks.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectIdValid, trimmedProjectId, taskPage]);
+
+  useEffect(() => {
+    if (!projectIdValid || loading) return;
+    const maxPage = Math.max(0, Math.ceil(taskTotal / TASK_PAGE_SIZE) - 1);
+    if (taskPage > maxPage) setTaskPage(maxPage);
+  }, [projectIdValid, loading, taskTotal, taskPage]);
 
   useEffect(() => {
     let cancelled = false;
@@ -128,24 +176,28 @@ export default function ProjectDetailClient({
             ) {
               break;
             }
-            setTasks((prev) => {
-              if (prev.some((t) => t.id === ev.entity_id)) return prev;
-              const newTask: TaskRead = {
-                id: ev.entity_id,
-                project_id: ev.project_id,
-                title,
-                status: statusStr as TaskStatus,
-                priority: priorityVal,
-                assigned_to_json: null,
-                description: null,
-                tags_json: null,
-                custom_fields_json: null,
-                version: 1,
-                created_at: ev.timestamp,
-                updated_at: ev.timestamp,
-              };
-              return [newTask, ...prev];
-            });
+            if (tasksRef.current.some((t) => t.id === ev.entity_id)) {
+              break;
+            }
+            setTaskTotal((t) => t + 1);
+            if (taskPageRef.current !== 0) break;
+            const newTask: TaskRead = {
+              id: ev.entity_id,
+              project_id: ev.project_id,
+              title,
+              status: statusStr as TaskStatus,
+              priority: priorityVal,
+              assigned_to_json: null,
+              description: null,
+              tags_json: null,
+              custom_fields_json: null,
+              version: 1,
+              created_at: ev.timestamp,
+              updated_at: ev.timestamp,
+            };
+            setTasks((prev) =>
+              [newTask, ...prev].slice(0, TASK_PAGE_SIZE),
+            );
             break;
           }
           case "TASK_UPDATED": {
@@ -166,6 +218,7 @@ export default function ProjectDetailClient({
           }
           case "TASK_DELETED": {
             setTasks((prev) => prev.filter((t) => t.id !== ev.entity_id));
+            setTaskTotal((t) => Math.max(0, t - 1));
             setSelectedTaskId((sid) => (sid === ev.entity_id ? null : sid));
             break;
           }
@@ -183,19 +236,24 @@ export default function ProjectDetailClient({
                 ? ev.payload.created_at
                 : ev.timestamp;
             if (taskId && taskId === selectedTaskIdRef.current) {
-              setComments((prev) => {
-                if (prev.some((c) => c.id === ev.entity_id)) return prev;
-                return [
-                  {
-                    id: ev.entity_id,
-                    task_id: taskId,
-                    content,
-                    author,
-                    created_at: createdAt,
-                  },
-                  ...prev,
-                ];
-              });
+              if (commentsRef.current.some((c) => c.id === ev.entity_id)) {
+                break;
+              }
+              setCommentTotal((t) => t + 1);
+              if (commentPageRef.current === 0) {
+                setComments((prev) =>
+                  [
+                    {
+                      id: ev.entity_id,
+                      task_id: taskId,
+                      content,
+                      author,
+                      created_at: createdAt,
+                    },
+                    ...prev,
+                  ].slice(0, COMMENT_PAGE_SIZE),
+                );
+              }
             }
             break;
           }
@@ -209,30 +267,49 @@ export default function ProjectDetailClient({
   }, [projectIdValid, trimmedProjectId]);
 
   useEffect(() => {
-    async function loadComments() {
-      if (!selectedTaskId) {
-        setComments([]);
-        setCommentsError(null);
-        setCommentsLoading(false);
-        return;
-      }
-
-      setCommentsLoading(true);
+    if (!selectedTaskId) {
+      setComments([]);
+      setCommentTotal(0);
       setCommentsError(null);
-      try {
-        const list = await getCommentsByTask(selectedTaskId);
-        setComments(list);
-      } catch (e) {
-        setCommentsError(
-          e instanceof Error ? e.message : "Failed to load comments.",
-        );
-      } finally {
-        setCommentsLoading(false);
-      }
+      setCommentsLoading(false);
+      return;
     }
 
-    loadComments();
-  }, [selectedTaskId]);
+    let cancelled = false;
+    setCommentsLoading(true);
+    setCommentsError(null);
+
+    (async () => {
+      try {
+        const offset = commentPage * COMMENT_PAGE_SIZE;
+        const res = await getCommentsByTask(selectedTaskId, {
+          limit: COMMENT_PAGE_SIZE,
+          offset,
+        });
+        if (cancelled) return;
+        setComments(res.items);
+        setCommentTotal(res.total);
+      } catch (e) {
+        if (!cancelled) {
+          setCommentsError(
+            e instanceof Error ? e.message : "Failed to load comments.",
+          );
+        }
+      } finally {
+        if (!cancelled) setCommentsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTaskId, commentPage]);
+
+  useEffect(() => {
+    if (!selectedTaskId || commentsLoading) return;
+    const maxPage = Math.max(0, Math.ceil(commentTotal / COMMENT_PAGE_SIZE) - 1);
+    if (commentPage > maxPage) setCommentPage(maxPage);
+  }, [selectedTaskId, commentsLoading, commentTotal, commentPage]);
 
   const statusOptions: TaskStatus[] = useMemo(
     () => ["TODO", "IN_PROGRESS", "BLOCKED", "DONE"],
@@ -296,8 +373,14 @@ export default function ProjectDetailClient({
 
       setTitle("");
       setDescription("");
-      setPriority("MEDIUM");
-      await loadTasks(trimmedProjectId);
+      setPriority("P2");
+      setTaskPage(0);
+      const res = await getTasksByProject(trimmedProjectId, {
+        limit: TASK_PAGE_SIZE,
+        offset: 0,
+      });
+      setTasks(res.items);
+      setTaskTotal(res.total);
     } catch (e2) {
       setError(e2 instanceof Error ? e2.message : "Failed to create task.");
     } finally {
@@ -313,7 +396,12 @@ export default function ProjectDetailClient({
     setUpdatingTaskId(taskId);
     try {
       await updateTask(taskId, { status: newStatus });
-      await loadTasks(trimmedProjectId);
+      const res = await getTasksByProject(trimmedProjectId, {
+        limit: TASK_PAGE_SIZE,
+        offset: taskPage * TASK_PAGE_SIZE,
+      });
+      setTasks(res.items);
+      setTaskTotal(res.total);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to update task.");
     } finally {
@@ -332,9 +420,15 @@ export default function ProjectDetailClient({
       if (selectedTaskId === taskId) {
         setSelectedTaskId(null);
         setComments([]);
+        setCommentTotal(0);
         setCommentsError(null);
       }
-      await loadTasks(trimmedProjectId);
+      const res = await getTasksByProject(trimmedProjectId, {
+        limit: TASK_PAGE_SIZE,
+        offset: taskPage * TASK_PAGE_SIZE,
+      });
+      setTasks(res.items);
+      setTaskTotal(res.total);
       setSuccessMessage("Task deleted.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to delete task.");
@@ -342,6 +436,20 @@ export default function ProjectDetailClient({
       setDeletingTaskId(null);
     }
   }
+
+  function selectTask(id: string) {
+    setSelectedTaskId(id);
+    setCommentPage(0);
+  }
+
+  const taskRangeStart = taskTotal === 0 ? 0 : taskPage * TASK_PAGE_SIZE + 1;
+  const taskRangeEnd = Math.min(taskTotal, (taskPage + 1) * TASK_PAGE_SIZE);
+  const commentRangeStart =
+    commentTotal === 0 ? 0 : commentPage * COMMENT_PAGE_SIZE + 1;
+  const commentRangeEnd = Math.min(
+    commentTotal,
+    (commentPage + 1) * COMMENT_PAGE_SIZE,
+  );
 
   return (
     <div className="space-y-6">
@@ -443,7 +551,7 @@ export default function ProjectDetailClient({
               </div>
             ) : null}
 
-            {!loading && tasks.length === 0 ? (
+            {!loading && taskTotal === 0 ? (
               <div className="text-sm text-zinc-600 dark:text-zinc-400">
                 No tasks yet.
               </div>
@@ -454,15 +562,15 @@ export default function ProjectDetailClient({
                 <Card
                   key={task.id}
                   className={[
-                    "p-3",
+                    "cursor-pointer p-3",
                     selectedTaskId === task.id ? "border-blue-500" : "",
                   ].join(" ")}
-                  onClick={() => setSelectedTaskId(task.id)}
+                  onClick={() => selectTask(task.id)}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(ev) => {
                     if (ev.key === "Enter" || ev.key === " ") {
-                      setSelectedTaskId(task.id);
+                      selectTask(task.id);
                     }
                   }}
                 >
@@ -515,6 +623,35 @@ export default function ProjectDetailClient({
                 </Card>
               ))}
             </div>
+
+            {taskTotal > 0 ? (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+                <span className="text-xs text-zinc-500">
+                  {taskRangeStart}–{taskRangeEnd} of {taskTotal}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={loading || taskPage === 0}
+                    onClick={() => setTaskPage((p) => Math.max(0, p - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={
+                      loading ||
+                      (taskPage + 1) * TASK_PAGE_SIZE >= taskTotal
+                    }
+                    onClick={() => setTaskPage((p) => p + 1)}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </Card>
         </div>
 
@@ -540,7 +677,9 @@ export default function ProjectDetailClient({
               </div>
             ) : null}
 
-            {selectedTaskId && !commentsLoading && comments.length === 0 ? (
+            {selectedTaskId &&
+            !commentsLoading &&
+            commentTotal === 0 ? (
               <div className="text-sm text-zinc-600 dark:text-zinc-400">
                 No comments yet.
               </div>
@@ -572,6 +711,38 @@ export default function ProjectDetailClient({
               </div>
             ) : null}
 
+            {selectedTaskId && commentTotal > 0 ? (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+                <span className="text-xs text-zinc-500">
+                  {commentRangeStart}–{commentRangeEnd} of {commentTotal}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={commentsLoading || commentPage === 0}
+                    onClick={() =>
+                      setCommentPage((p) => Math.max(0, p - 1))
+                    }
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={
+                      commentsLoading ||
+                      (commentPage + 1) * COMMENT_PAGE_SIZE >=
+                        commentTotal
+                    }
+                    onClick={() => setCommentPage((p) => p + 1)}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
             {selectedTaskId ? (
               <form
                 className="mt-5 grid gap-2"
@@ -583,14 +754,21 @@ export default function ProjectDetailClient({
                   if (!trimmedContent) return;
 
                   try {
-                    await createComment(selectedTaskId, {
+                    const created = await createComment(selectedTaskId, {
                       content: trimmedContent,
                       author: "You",
                     });
                     setNewCommentContent("");
-
-                    const list = await getCommentsByTask(selectedTaskId);
-                    setComments(list);
+                    setCommentTotal((t) => t + 1);
+                    if (commentPageRef.current === 0) {
+                      setComments((prev) => {
+                        if (prev.some((c) => c.id === created.id)) return prev;
+                        return [created, ...prev].slice(
+                          0,
+                          COMMENT_PAGE_SIZE,
+                        );
+                      });
+                    }
                   } catch (e2) {
                     setCommentsError(
                       e2 instanceof Error

@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.comment import Comment
@@ -19,12 +19,24 @@ def create_comment(db: Session, payload: CommentCreate) -> CommentRead:
     return CommentRead.model_validate(row)
 
 
-def list_comments_by_task_id(db: Session, task_id: uuid.UUID) -> list[CommentRead]:
+def list_comments_by_task_id(
+    db: Session,
+    task_id: uuid.UUID,
+    *,
+    limit: int,
+    offset: int,
+) -> tuple[list[CommentRead], int]:
+    count_stmt = select(func.count()).select_from(Comment).where(
+        Comment.task_id == task_id,
+    )
+    total = int(db.scalar(count_stmt) or 0)
     stmt = (
         select(Comment)
         .where(Comment.task_id == task_id)
         .order_by(Comment.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
     rows = list(db.scalars(stmt).all())
-    return [CommentRead.model_validate(r) for r in rows]
+    return [CommentRead.model_validate(r) for r in rows], total
 

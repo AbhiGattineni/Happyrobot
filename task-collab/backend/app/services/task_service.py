@@ -1,7 +1,7 @@
 import uuid
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.task import Task
@@ -54,14 +54,23 @@ def create_task(db: Session, payload: TaskCreate) -> TaskRead:
 def list_tasks_by_project_id(
     db: Session,
     project_id: uuid.UUID,
-) -> list[TaskRead]:
+    *,
+    limit: int,
+    offset: int,
+) -> tuple[list[TaskRead], int]:
+    count_stmt = select(func.count()).select_from(Task).where(
+        Task.project_id == project_id,
+    )
+    total = int(db.scalar(count_stmt) or 0)
     stmt = (
         select(Task)
         .where(Task.project_id == project_id)
         .order_by(Task.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
     rows = list(db.scalars(stmt).all())
-    return [TaskRead.model_validate(r) for r in rows]
+    return [TaskRead.model_validate(r) for r in rows], total
 
 
 def get_task_by_id(db: Session, task_id: uuid.UUID) -> TaskRead | None:

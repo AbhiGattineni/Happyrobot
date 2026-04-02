@@ -39,8 +39,23 @@ async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-export async function getCommentsByTask(taskId: string) {
-  return apiJson<CommentRead[]>(`/tasks/${taskId}/comments`, { method: "GET" });
+export type CommentListPage = {
+  items: CommentRead[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export async function getCommentsByTask(
+  taskId: string,
+  params?: { limit?: number; offset?: number },
+) {
+  const sp = new URLSearchParams();
+  if (params?.limit != null) sp.set("limit", String(params.limit));
+  if (params?.offset != null) sp.set("offset", String(params.offset));
+  const q = sp.toString();
+  const path = `/tasks/${taskId}/comments${q ? `?${q}` : ""}`;
+  return apiJson<CommentListPage>(path, { method: "GET" });
 }
 
 export async function createComment(taskId: string, payload: CommentCreateInput) {

@@ -19,3 +19,12 @@ class CommentRead(BaseModel):
     content: str
     author: str
     created_at: datetime
+
+
+class CommentListPage(BaseModel):
+    """Paginated comments for a task."""
+
+    items: list[CommentRead]
+    total: int
+    limit: int
+    offset: int

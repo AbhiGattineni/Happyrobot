@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "projects": [
+    {
+      "name": "Project 1",
+      "description": "Seed data: Project 1",
+      "metadata_json": null,
+      "tasks": {
+        "count": 10,
+        "titleTemplate": "Task {n}",
+        "descriptionTemplate": null,
+        "statusPattern": ["TODO", "IN_PROGRESS", "BLOCKED", "DONE"],
+        "priorityPattern": ["P0", "P1", "P2", "P3"],
+        "assigned_to_json": null,
+        "tags_json": null,
+        "custom_fields_json": null
+      },
+      "comments": {
+        "countPerTask": 1000,
+        "author": "Seed User",
+        "contentTemplate": "Comment on task {n}"
+      }
+    },
+    {
+      "name": "Project 2",
+      "description": "Seed data: Project 2",
+      "metadata_json": null,
+      "tasks": {
+        "count": 200,
+        "titleTemplate": "Task {n}",
+        "descriptionTemplate": null,
+        "statusPattern": ["TODO", "IN_PROGRESS", "BLOCKED", "DONE"],
+        "priorityPattern": ["P0", "P1", "P2", "P3"],
+        "assigned_to_json": null,
+        "tags_json": null,
+        "custom_fields_json": null
+      },
+      "comments": {
+        "countPerTask": 1,
+        "author": "Seed User",
+        "contentTemplate": "Comment on task {n}"
+      }
+    },
+    {
+      "name": "Project 3",
+      "description": "Seed data: Project 3",
+      "metadata_json": null,
+      "tasks": {
+        "count": 300,
+        "titleTemplate": "Task {n}",
+        "descriptionTemplate": null,
+        "statusPattern": ["TODO", "IN_PROGRESS", "BLOCKED", "DONE"],
+        "priorityPattern": ["P0", "P1", "P2", "P3"],
+        "assigned_to_json": null,
+        "tags_json": null,
+        "custom_fields_json": null
+      },
+      "comments": {
+        "countPerTask": 1,
+        "author": "Seed User",
+        "contentTemplate": "Comment on task {n}"
+      }
+    },
+    {
+      "name": "Project 4",
+      "description": "Seed data: Project 4",
+      "metadata_json": null,
+      "tasks": {
+        "count": 4000,
+        "titleTemplate": "Task {n}",
+        "descriptionTemplate": null,
+        "statusPattern": ["TODO", "IN_PROGRESS", "BLOCKED", "DONE"],
+        "priorityPattern": ["P0", "P1", "P2", "P3"],
+        "assigned_to_json": null,
+        "tags_json": null,
+        "custom_fields_json": null
+      },
+      "comments": {
+        "countPerTask": 1,
+        "author": "Seed User",
+        "contentTemplate": "Comment on task {n}"
+      }
+    }
+  ]
+}
+

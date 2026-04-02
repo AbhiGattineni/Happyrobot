@@ -88,8 +88,23 @@ async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-export async function getTasksByProject(projectId: string) {
-  return apiJson<TaskRead[]>(`/projects/${projectId}/tasks`, { method: "GET" });
+export type TaskListPage = {
+  items: TaskRead[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export async function getTasksByProject(
+  projectId: string,
+  params?: { limit?: number; offset?: number },
+) {
+  const sp = new URLSearchParams();
+  if (params?.limit != null) sp.set("limit", String(params.limit));
+  if (params?.offset != null) sp.set("offset", String(params.offset));
+  const q = sp.toString();
+  const path = `/projects/${projectId}/tasks${q ? `?${q}` : ""}`;
+  return apiJson<TaskListPage>(path, { method: "GET" });
 }
 
 export async function createTask(projectId: string, payload: TaskCreateInput) {

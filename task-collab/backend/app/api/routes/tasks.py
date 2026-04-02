@@ -1,11 +1,11 @@
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.schemas.comment import CommentCreate, CommentRead
-from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
+from app.schemas.task import TaskCreate, TaskListPage, TaskRead, TaskUpdate
 from app.schemas.task_dependency import TaskDependencyCreate, TaskDependencyRead
 from app.services import comment_service as comment_svc
 from app.services import task_service as task_svc
@@ -17,13 +17,18 @@ router = APIRouter(tags=["tasks"])
 
 @router.get(
     "/projects/{project_id}/tasks",
-    response_model=list[TaskRead],
+    response_model=TaskListPage,
 )
 def list_tasks(
     project_id: uuid.UUID,
+    limit: int = Query(25, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
-    return task_svc.list_tasks_by_project_id(db, project_id)
+    items, total = task_svc.list_tasks_by_project_id(
+        db, project_id, limit=limit, offset=offset
+    )
+    return TaskListPage(items=items, total=total, limit=limit, offset=offset)
 
 
 @router.post(

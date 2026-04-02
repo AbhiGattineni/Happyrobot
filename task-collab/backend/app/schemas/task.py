@@ -52,3 +52,12 @@ class TaskRead(BaseModel):
     version: int
     created_at: datetime
     updated_at: datetime
+
+
+class TaskListPage(BaseModel):
+    """Paginated task list for a project."""
+
+    items: list[TaskRead]
+    total: int
+    limit: int
+    offset: int

@@ -1,10 +1,30 @@
 import uuid
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.task import Task
+from app.models.task_dependency import TaskDependency
 from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
+
+
+def _validate_status_transition(current: str, new: str) -> None:
+    allowed: dict[str, set[str]] = {
+        "TODO": {"IN_PROGRESS"},
+        "IN_PROGRESS": {"BLOCKED", "DONE"},
+        "BLOCKED": {"IN_PROGRESS"},
+    }
+
+    # Allow no-op updates (e.g. sending the same status again).
+    if current == new:
+        return
+
+    if new not in allowed.get(current, set()):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid task status transition: {current} -> {new}",
+        )
 
 
 def create_task(db: Session, payload: TaskCreate) -> TaskRead:
@@ -52,7 +72,53 @@ def update_task_by_id(
     row = db.scalar(select(Task).where(Task.id == task_id))
     if row is None:
         return None
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+
+    # Validate status transitions only when `status` is being updated.
+    if "status" in updates and updates["status"] is not None:
+        current_status = str(row.status)
+        new_status = str(updates["status"])
+        _validate_status_transition(current_status, new_status)
+
+        # When moving to DONE, ensure all dependencies are already DONE.
+        # Dependencies here mean: tasks this task depends on (TaskDependency.task_id == task_id).
+        if new_status == "DONE":
+            dep_rows = list(
+                db.execute(
+                    select(TaskDependency.depends_on_task_id, Task.status)
+                    .join(
+                        Task,
+                        Task.id == TaskDependency.depends_on_task_id,
+                    )
+                    .where(TaskDependency.task_id == task_id)
+                )
+            )
+
+            not_done = [
+                (dep_id, str(dep_status))
+                for dep_id, dep_status in dep_rows
+                if str(dep_status) != "DONE"
+            ]
+
+            if not_done:
+                blocked = next(
+                    ((dep_id, dep_status) for dep_id, dep_status in not_done if dep_status == "BLOCKED"),  # noqa: E501
+                    None,
+                )
+                if blocked is not None:
+                    dep_id, _dep_status = blocked
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Cannot move task to DONE: dependency {dep_id} is BLOCKED",
+                    )
+
+                dep_id, dep_status = not_done[0]
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot move task to DONE: dependency {dep_id} is {dep_status}",
+                )
+
+    for key, value in updates.items():
         setattr(row, key, value)
     db.commit()
     db.refresh(row)

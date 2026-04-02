@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -10,6 +10,7 @@ from app.schemas.task_dependency import TaskDependencyCreate, TaskDependencyRead
 from app.services import comment_service as comment_svc
 from app.services import task_service as task_svc
 from app.services import task_dependency_service as task_dep_svc
+from app.websocket import task_events as task_ws
 
 router = APIRouter(tags=["tasks"])
 
@@ -33,10 +34,14 @@ def list_tasks(
 def create_task(
     project_id: uuid.UUID,
     payload: TaskCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     merged = payload.model_copy(update={"project_id": project_id})
-    return task_svc.create_task(db, merged)
+    created = task_svc.create_task(db, merged)
+    pid = str(project_id)
+    background_tasks.add_task(task_ws.broadcast_task_created, pid, created)
+    return created
 
 
 @router.patch(
@@ -46,11 +51,19 @@ def create_task(
 def update_task(
     task_id: uuid.UUID,
     payload: TaskUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
+    changed = set(payload.model_dump(exclude_unset=True).keys())
     updated = task_svc.update_task_by_id(db, task_id, payload)
     if updated is None:
         raise HTTPException(status_code=404, detail="Task not found")
+    background_tasks.add_task(
+        task_ws.broadcast_task_updated,
+        str(updated.project_id),
+        updated,
+        changed,
+    )
     return updated
 
 
@@ -60,10 +73,17 @@ def update_task(
 )
 def delete_task(
     task_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    if not task_svc.delete_task_by_id(db, task_id):
+    deleted_project_id = task_svc.delete_task_by_id(db, task_id)
+    if deleted_project_id is None:
         raise HTTPException(status_code=404, detail="Task not found")
+    background_tasks.add_task(
+        task_ws.broadcast_task_deleted,
+        str(deleted_project_id),
+        str(task_id),
+    )
 
 
 @router.post(
@@ -96,7 +116,19 @@ def create_task_dependency(
 def create_comment(
     task_id: uuid.UUID,
     payload: CommentCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
+    task = task_svc.get_task_by_id(db, task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
     merged = payload.model_copy(update={"task_id": task_id})
-    return comment_svc.create_comment(db, merged)
+    created = comment_svc.create_comment(db, merged)
+    tid = str(task_id)
+    background_tasks.add_task(
+        task_ws.broadcast_comment_created,
+        str(task.project_id),
+        created,
+        tid,
+    )
+    return created

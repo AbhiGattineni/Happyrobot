@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -20,6 +20,7 @@ import {
   getCommentsByTask,
   type CommentRead,
 } from "@/lib/api/comments";
+import { connectProjectRealtime } from "@/lib/websocket/client";
 
 function statusLabel(status: TaskStatus) {
   return status === "IN_PROGRESS" ? "IN PROGRESS" : status;
@@ -39,6 +40,7 @@ export default function ProjectDetailClient({
   const [error, setError] = useState<string | null>(null);
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const selectedTaskIdRef = useRef<string | null>(null);
   const [comments, setComments] = useState<CommentRead[]>([]);
   const [commentsLoading, setCommentsLoading] = useState<boolean>(false);
   const [commentsError, setCommentsError] = useState<string | null>(null);
@@ -48,6 +50,10 @@ export default function ProjectDetailClient({
 
   const projectIdValid =
     trimmedProjectId !== "" && trimmedProjectId !== "undefined" && UUID_RE.test(trimmedProjectId);
+
+  useEffect(() => {
+    selectedTaskIdRef.current = selectedTaskId;
+  }, [selectedTaskId]);
 
   async function loadTasks(id: string) {
     setLoading(true);
@@ -100,6 +106,106 @@ export default function ProjectDetailClient({
     return () => {
       cancelled = true;
     };
+  }, [projectIdValid, trimmedProjectId]);
+
+  useEffect(() => {
+    if (!projectIdValid) return;
+
+    const disconnect = connectProjectRealtime(trimmedProjectId, {
+      onEvent(ev) {
+        if (ev.project_id !== trimmedProjectId) return;
+
+        switch (ev.type) {
+          case "TASK_CREATED": {
+            const p = ev.payload;
+            const title = p.title;
+            const statusStr = p.status;
+            const priorityVal = p.priority;
+            if (
+              typeof title !== "string" ||
+              typeof statusStr !== "string" ||
+              typeof priorityVal !== "string"
+            ) {
+              break;
+            }
+            setTasks((prev) => {
+              if (prev.some((t) => t.id === ev.entity_id)) return prev;
+              const newTask: TaskRead = {
+                id: ev.entity_id,
+                project_id: ev.project_id,
+                title,
+                status: statusStr as TaskStatus,
+                priority: priorityVal,
+                assigned_to_json: null,
+                description: null,
+                tags_json: null,
+                custom_fields_json: null,
+                version: 1,
+                created_at: ev.timestamp,
+                updated_at: ev.timestamp,
+              };
+              return [newTask, ...prev];
+            });
+            break;
+          }
+          case "TASK_UPDATED": {
+            const p = ev.payload;
+            setTasks((prev) =>
+              prev.map((t) => {
+                if (t.id !== ev.entity_id) return t;
+                const next = { ...t };
+                if (typeof p.title === "string") next.title = p.title;
+                if (typeof p.status === "string")
+                  next.status = p.status as TaskStatus;
+                if (typeof p.priority === "string") next.priority = p.priority;
+                next.updated_at = ev.timestamp;
+                return next;
+              }),
+            );
+            break;
+          }
+          case "TASK_DELETED": {
+            setTasks((prev) => prev.filter((t) => t.id !== ev.entity_id));
+            setSelectedTaskId((sid) => (sid === ev.entity_id ? null : sid));
+            break;
+          }
+          case "COMMENT_CREATED": {
+            const taskId =
+              typeof ev.payload.task_id === "string"
+                ? ev.payload.task_id
+                : "";
+            const author =
+              typeof ev.payload.author === "string" ? ev.payload.author : "";
+            const content =
+              typeof ev.payload.content === "string" ? ev.payload.content : "";
+            const createdAt =
+              typeof ev.payload.created_at === "string"
+                ? ev.payload.created_at
+                : ev.timestamp;
+            if (taskId && taskId === selectedTaskIdRef.current) {
+              setComments((prev) => {
+                if (prev.some((c) => c.id === ev.entity_id)) return prev;
+                return [
+                  {
+                    id: ev.entity_id,
+                    task_id: taskId,
+                    content,
+                    author,
+                    created_at: createdAt,
+                  },
+                  ...prev,
+                ];
+              });
+            }
+            break;
+          }
+          default:
+            break;
+        }
+      },
+    });
+
+    return disconnect;
   }, [projectIdValid, trimmedProjectId]);
 
   useEffect(() => {

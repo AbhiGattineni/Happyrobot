@@ -132,10 +132,11 @@ def update_task_by_id(
     return TaskRead.model_validate(row)
 
 
-def delete_task_by_id(db: Session, task_id: uuid.UUID) -> bool:
+def delete_task_by_id(db: Session, task_id: uuid.UUID) -> uuid.UUID | None:
     row = db.scalar(select(Task).where(Task.id == task_id))
     if row is None:
-        return False
+        return None
+    project_id = row.project_id
     db.delete(row)
     db.commit()
-    return True
+    return project_id

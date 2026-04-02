@@ -48,3 +48,19 @@ class Task(Base):
         back_populates="task",
         cascade="all, delete-orphan",
     )
+
+    # Dependencies: this task depends on other tasks.
+    dependencies = relationship(
+        "TaskDependency",
+        foreign_keys="TaskDependency.task_id",
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )
+
+    # Dependents: other tasks depend on this task.
+    dependents = relationship(
+        "TaskDependency",
+        foreign_keys="TaskDependency.depends_on_task_id",
+        back_populates="depends_on_task",
+        cascade="all, delete-orphan",
+    )

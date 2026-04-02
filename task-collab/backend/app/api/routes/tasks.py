@@ -6,8 +6,10 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.schemas.comment import CommentCreate, CommentRead
 from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
+from app.schemas.task_dependency import TaskDependencyCreate, TaskDependencyRead
 from app.services import comment_service as comment_svc
 from app.services import task_service as task_svc
+from app.services import task_dependency_service as task_dep_svc
 
 router = APIRouter(tags=["tasks"])
 
@@ -61,6 +63,28 @@ def delete_task(
     db: Session = Depends(get_db),
 ):
     if not task_svc.delete_task_by_id(db, task_id):
+        raise HTTPException(status_code=404, detail="Task not found")
+
+
+@router.post(
+    "/tasks/{task_id}/dependencies",
+    response_model=TaskDependencyRead,
+    status_code=201,
+)
+def create_task_dependency(
+    task_id: uuid.UUID,
+    payload: TaskDependencyCreate,
+    db: Session = Depends(get_db),
+):
+    try:
+        return task_dep_svc.add_dependency(
+            db,
+            task_id=task_id,
+            depends_on_task_id=payload.depends_on_task_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except LookupError:
         raise HTTPException(status_code=404, detail="Task not found")
 
 

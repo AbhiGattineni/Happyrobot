@@ -1,3 +1,5 @@
+import { apiOrigin } from "@/lib/config";
+
 export type ProjectRead = {
   id: string;
   name: string;
@@ -13,18 +15,8 @@ export type ProjectCreateInput = {
   metadata_json?: Record<string, unknown> | null;
 };
 
-function getApiBaseUrl() {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!baseUrl) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_API_BASE_URL environment variable (required for API calls).",
-    );
-  }
-  return baseUrl.replace(/\/+$/, "");
-}
-
 async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${getApiBaseUrl()}${path}`, {
+  const res = await fetch(`${apiOrigin()}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",

@@ -1,3 +1,5 @@
+import { apiOrigin } from "@/lib/config";
+
 export type TaskStatus = "TODO" | "IN_PROGRESS" | "BLOCKED" | "DONE";
 
 export type TaskRead = {
@@ -36,18 +38,8 @@ export type TaskUpdateInput = Partial<{
   version: number;
 }>;
 
-function getApiBaseUrl() {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!baseUrl) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_API_BASE_URL environment variable (required for API calls).",
-    );
-  }
-  return baseUrl.replace(/\/+$/, "");
-}
-
 async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${getApiBaseUrl()}${path}`, {
+  const res = await fetch(`${apiOrigin()}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -122,7 +114,7 @@ export async function updateTask(taskId: string, payload: TaskUpdateInput) {
 }
 
 export async function deleteTask(taskId: string) {
-  const res = await fetch(`${getApiBaseUrl()}/tasks/${taskId}`, {
+  const res = await fetch(`${apiOrigin()}/tasks/${taskId}`, {
     method: "DELETE",
     cache: "no-store",
   });

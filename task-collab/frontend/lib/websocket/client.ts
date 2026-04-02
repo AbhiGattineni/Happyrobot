@@ -1,3 +1,5 @@
+import { apiOrigin } from "@/lib/config";
+
 export type RealtimeEnvelope = {
   type: string;
   project_id: string;
@@ -6,19 +8,9 @@ export type RealtimeEnvelope = {
   timestamp: string;
 };
 
-function getApiBaseUrl() {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!baseUrl) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_API_BASE_URL environment variable (required for WebSocket URL).",
-    );
-  }
-  return baseUrl.replace(/\/+$/, "");
-}
-
 /** Builds `ws://` / `wss://` URL to backend `/ws` with optional initial project room. */
 export function buildWebSocketUrl(projectId?: string) {
-  const u = new URL(getApiBaseUrl());
+  const u = new URL(apiOrigin());
   u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
   u.pathname = "/ws";
   u.search = "";
